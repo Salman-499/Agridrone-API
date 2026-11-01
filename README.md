@@ -1,52 +1,53 @@
 # Agridrone API
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python)](https://www.python.org/) [![FastAPI](https://img.shields.io/badge/FastAPI-API-green?logo=fastapi)](https://fastapi.tiangolo.com/) [![YOLOv8](https://img.shields.io/badge/YOLOv8-vision-orange?logo=github)](https://github.com/ultralytics/ultralytics) [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python)](https://www.python.org/) [![FastAPI](https://img.shields.io/badge/FastAPI-API-green?logo=fastapi)](https://fastapi.tiangolo.com/) [![YOLO11](https://img.shields.io/badge/YOLO11-custom%204--channel-orange?logo=github)](https://github.com/ultralytics/ultralytics) [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
 
 ## Overview
 
-**Agridrone API** is an advanced agricultural image analysis system that combines NDVI (Normalized Difference Vegetation Index) prediction and object detection using deep learning. It enables automated crop health monitoring, field analysis, and feature detection in aerial or drone imagery. The API supports a full pipeline from RGB images to NDVI computation and YOLO-based detection, making it ideal for precision agriculture and research.
+**Agridrone API** serves the models from the **AgriDrone** research project at NUST: crop instance segmentation and growth-stage estimation for vegetable crops from UAV imagery. It takes an ordinary RGB drone image, predicts a synthetic NDVI band from it, stacks RGB + NDVI into a 4-channel image, and runs a custom YOLO11 model that finds each plant, outlines it, and estimates its growth stage.
 
 ---
 
 ## Key Features
-- **NDVI prediction** from RGB images for crop health assessment
-- **YOLOv8 object detection** on 4-channel TIFFs for field feature analysis
-- **Full pipeline**: RGB → NDVI → 4-channel TIFF → YOLO detection
+- **Synthetic NDVI from RGB**: predicts an NDVI band from RGB imagery, so the models work without a multispectral camera
+- **Custom 4-channel YOLO11**: instance segmentation on RGB + NDVI input, with an extra output that regresses a growth-stage value for each detected plant (BBCH scale)
+- **Full pipeline**: RGB → synthetic NDVI → 4-channel image → YOLO11 masks, classes and growth stages
 - **FastAPI** backend with async endpoints and auto-generated docs
-- **Dockerized** for easy deployment
-- **Nginx reverse proxy** for production
-- **Modular**: Easily extend to new crops or detection tasks
+- **Next.js web frontend** for uploading images and viewing results
+- **Dockerized**, with an **Nginx reverse proxy** for production
 
 ---
 
 ## Architecture
-- **Models**: NDVI predictor (Keras/TensorFlow), YOLOv8 (PyTorch)
+- **Models**:
+  - NDVI predictor: segmentation network with an EfficientNet-B2 encoder (TensorFlow/Keras)
+  - Crop model: modified Ultralytics YOLO11 with 4 input channels and a growth-stage regression output (PyTorch)
 - **Backend**: FastAPI (Python 3.9+)
+- **Frontend**: Next.js (`frontend/`)
 - **Deployment**: Docker Compose, Nginx (optional)
 - **Workflow**:
-  1. Upload RGB image
-  2. NDVI prediction (vegetation health)
-  3. Convert to 4-channel TIFF
-  4. YOLOv8 detection (objects, crops, anomalies)
-  5. Return results (JSON, annotated images, NDVI bands)
+  1. Upload an RGB image
+  2. Predict a synthetic NDVI band
+  3. Stack RGB + NDVI into a 4-channel image
+  4. Run YOLO11: crop masks, crop type and growth stage per plant
+  5. Return results (JSON, annotated images, NDVI band)
 
 ---
 
 ## API Endpoints
 - `GET /` — API info
-- `POST /predict_ndvi/` — Predict NDVI from RGB image (returns NDVI visualization and band)
-- `POST /predict_yolo/` — YOLO detection on 4-channel TIFF (returns JSON)
-- `POST /predict_pipeline/` — Full RGB→NDVI→YOLO pipeline (returns JSON)
-- `POST /predict_yolo_image/` — YOLO detection with annotated image (PNG)
+- `POST /predict_ndvi/` — Predict NDVI from an RGB image (returns NDVI visualization and band)
+- `POST /predict_yolo/` — YOLO11 prediction on a 4-channel TIFF (returns JSON)
+- `POST /predict_pipeline/` — Full RGB → NDVI → YOLO11 pipeline (returns JSON)
+- `POST /predict_yolo_image/` — YOLO11 prediction with annotated image (PNG)
 - `POST /predict_pipeline_image/` — Full pipeline with annotated image (PNG)
 
 ---
 
-## Example Use Cases
-- **Precision agriculture**: Automated crop health monitoring
-- **Field scouting**: Detecting weeds, disease, or anomalies
-- **Research**: Large-scale field trials, remote sensing
-- **Agri-tech products**: Integrate with farm management platforms
+## Use Cases
+- **Precision agriculture**: locating individual plants and tracking their growth stage
+- **Harvest timing**: estimating when crops reach target growth stages
+- **Research**: crop phenotyping from UAV imagery
 
 ---
 
@@ -72,12 +73,14 @@ docker-compose up --build
 
 ## File Structure
 ```
-agridrone_api/
-├── Agridrone-API/
+Agridrone-API/
+├── Agridrone-API/          # FastAPI app and model code
 │   ├── app.py
-│   ├── best_yolo_model.pt
+│   ├── ndvi_predictor.py
+│   ├── yolo_predictor.py
 │   ├── ndvi_best_model/
-│   └── ...
+│   └── ultralytics/        # modified Ultralytics (4-channel YOLO11)
+├── frontend/               # Next.js web frontend
 ├── Dockerfile.agridrone
 ├── requirements.agridrone.txt
 ├── docker-compose.yml
@@ -89,7 +92,12 @@ agridrone_api/
 
 ## Example Request
 ```bash
-curl -X POST "http://localhost:8001/predict_ndvi/" -F "file=@test.jpg"
+curl -X POST "http://localhost:8001/predict_pipeline/" -F "file=@field_image.jpg"
 ```
 
 ---
+
+## Project & Credits
+This API is part of **AgriDrone**, a NUST-funded research project at SEECS (Principal Investigator: Dr. Mehvish Rashid). The models and FastAPI backend were developed by the AgriDrone team (Muhammad Mashood, Muhammad Ahad Hassan Khan, Salman Arif). This repository adds the Next.js web frontend and the Docker/Nginx deployment.
+
+Related paper (under review): *Decoupled Two-Stage Deep Learning Pipeline for Vegetable Crop Instance Segmentation and BBCH Growth Stage Estimation from UAV Multispectral Imagery*, Computers and Electronics in Agriculture.
