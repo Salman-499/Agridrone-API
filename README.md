@@ -1,103 +1,46 @@
 # Agridrone API
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python)](https://www.python.org/) [![FastAPI](https://img.shields.io/badge/FastAPI-API-green?logo=fastapi)](https://fastapi.tiangolo.com/) [![YOLO11](https://img.shields.io/badge/YOLO11-custom%204--channel-orange?logo=github)](https://github.com/ultralytics/ultralytics) [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+Inference API and web front end for **AgriDrone**, a NUST-funded research project at SEECS (PI: Dr. Mehvish Rashid). The project collected UAV imagery of six vegetable crops at the National Agricultural Research Centre (NARC), Islamabad, and trained models that find and outline each plant and estimate its BBCH growth stage.
 
-## Overview
+This repo serves the models from that project.
 
-**Agridrone API** serves the models from the **AgriDrone** research project at NUST: crop instance segmentation and growth-stage estimation for vegetable crops from UAV imagery. It takes an ordinary RGB drone image, predicts a synthetic NDVI band from it, stacks RGB + NDVI into a 4-channel image, and runs a custom YOLO11 model that finds each plant, outlines it, and estimates its growth stage.
+## How it works
 
----
+1. Upload an ordinary RGB drone image.
+2. A segmentation network with an EfficientNet encoder (Keras) predicts a synthetic NDVI band from the RGB image, so no multispectral camera is needed.
+3. RGB and NDVI are stacked into a 4-channel image.
+4. A YOLO11 instance-segmentation model, adapted to take 4 input channels, finds and outlines each plant and labels the crop.
 
-## Key Features
-- **Synthetic NDVI from RGB**: predicts an NDVI band from RGB imagery, so the models work without a multispectral camera
-- **Custom 4-channel YOLO11**: instance segmentation on RGB + NDVI input, with an extra output that regresses a growth-stage value for each detected plant (BBCH scale)
-- **Full pipeline**: RGB → synthetic NDVI → 4-channel image → YOLO11 masks, classes and growth stages
-- **FastAPI** backend with async endpoints and auto-generated docs
-- **Next.js web frontend** for uploading images and viewing results
-- **Dockerized**, with an **Nginx reverse proxy** for production
+The `ultralytics/` folder is a copy of the Ultralytics library with its image loaders changed to keep the fourth (NDVI) channel.
 
----
+The paper describes a second stage that estimates each plant's growth stage. That stage isn't part of this API; the `growth_stages` field in the response is only filled if the loaded model returns it.
 
-## Architecture
-- **Models**:
-  - NDVI predictor: segmentation network with an EfficientNet-B2 encoder (TensorFlow/Keras)
-  - Crop model: modified Ultralytics YOLO11 with 4 input channels and a growth-stage regression output (PyTorch)
-- **Backend**: FastAPI (Python 3.9+)
-- **Frontend**: Next.js (`frontend/`)
-- **Deployment**: Docker Compose, Nginx (optional)
-- **Workflow**:
-  1. Upload an RGB image
-  2. Predict a synthetic NDVI band
-  3. Stack RGB + NDVI into a 4-channel image
-  4. Run YOLO11: crop masks, crop type and growth stage per plant
-  5. Return results (JSON, annotated images, NDVI band)
+## Endpoints
 
----
+| Method | Path | Input | Output |
+|---|---|---|---|
+| POST | `/predict_ndvi/` | RGB image | ZIP with an NDVI preview (PNG) and the NDVI band (`.npy`) |
+| POST | `/predict_yolo/` | 4-channel TIFF | JSON: boxes, classes, masks |
+| POST | `/predict_pipeline/` | RGB image | JSON for the full RGB → NDVI → YOLO11 pipeline |
+| POST | `/predict_yolo_image/` | 4-channel TIFF | Annotated PNG |
+| POST | `/predict_pipeline_image/` | RGB image | Annotated PNG |
 
-## API Endpoints
-- `GET /` — API info
-- `POST /predict_ndvi/` — Predict NDVI from an RGB image (returns NDVI visualization and band)
-- `POST /predict_yolo/` — YOLO11 prediction on a 4-channel TIFF (returns JSON)
-- `POST /predict_pipeline/` — Full RGB → NDVI → YOLO11 pipeline (returns JSON)
-- `POST /predict_yolo_image/` — YOLO11 prediction with annotated image (PNG)
-- `POST /predict_pipeline_image/` — Full pipeline with annotated image (PNG)
+## Running it
 
----
+Model weights are not included. Put them here before starting:
 
-## Use Cases
-- **Precision agriculture**: locating individual plants and tracking their growth stage
-- **Harvest timing**: estimating when crops reach target growth stages
-- **Research**: crop phenotyping from UAV imagery
+- `Agridrone-API/best_yolo_model.pt` (YOLO11)
+- `Agridrone-API/ndvi_best_model/best_model_weights.weights.h5` (NDVI model; the architecture file is already there)
 
----
-
-## Quickstart
-
-### Prerequisites
-- Docker & Docker Compose
-- Model files in the `Agridrone-API/` directory
-
-### 1. Build & Run (API only)
 ```bash
-docker-compose up --build agridrone
+docker-compose up --build agridrone      # API on http://localhost:8001
+docker-compose up --build                # API + Nginx on http://localhost/agridrone/
+
+cd frontend && npm install && npm run dev   # Next.js front end
 ```
 
-### 2. Build & Run (API + nginx proxy)
-```bash
-docker-compose up --build
-```
-- API: http://localhost:8001/
-- Via nginx: http://localhost/agridrone/
+## Credits
 
----
+The models and backend were developed by the AgriDrone team: Muhammad Mashood, Muhammad Ahad Hassan Khan and Salman Arif. I worked on the backend and on adapting YOLO11 to the 4-channel input, and built the Next.js front end and the Docker/Nginx setup.
 
-## File Structure
-```
-Agridrone-API/
-├── Agridrone-API/          # FastAPI app and model code
-│   ├── app.py
-│   ├── ndvi_predictor.py
-│   ├── yolo_predictor.py
-│   ├── ndvi_best_model/
-│   └── ultralytics/        # modified Ultralytics (4-channel YOLO11)
-├── frontend/               # Next.js web frontend
-├── Dockerfile.agridrone
-├── requirements.agridrone.txt
-├── docker-compose.yml
-├── nginx.conf
-└── README.md
-```
-
----
-
-## Example Request
-```bash
-curl -X POST "http://localhost:8001/predict_pipeline/" -F "file=@field_image.jpg"
-```
-
----
-
-## Project & Credits
-This API is part of **AgriDrone**, a NUST-funded research project at SEECS (Principal Investigator: Dr. Mehvish Rashid). The models and FastAPI backend were developed by the AgriDrone team (Muhammad Mashood, Muhammad Ahad Hassan Khan, Salman Arif). This repository adds the Next.js web frontend and the Docker/Nginx deployment.
-
-Related paper (under review): *Decoupled Two-Stage Deep Learning Pipeline for Vegetable Crop Instance Segmentation and BBCH Growth Stage Estimation from UAV Multispectral Imagery*, Computers and Electronics in Agriculture.
+Paper (under review): *Decoupled Two-Stage Deep Learning Pipeline for Vegetable Crop Instance Segmentation and BBCH Growth Stage Estimation from UAV Multispectral Imagery*, Computers and Electronics in Agriculture.
